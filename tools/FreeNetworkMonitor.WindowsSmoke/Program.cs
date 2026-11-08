@@ -43,10 +43,10 @@ public static class Program
             Invoke(root,"Démarrer une session manuelle");await Wait(()=>db.Sessions().Any(s=>s.End is null),"Session avant arrêt forcé");await Task.Delay(3000);
             app.Kill();await app.WaitForExitAsync();app=Process.Start(new ProcessStartInfo(args[0],"--data-dir \""+data+"\""){UseShellExecute=false});
             await Wait(()=>db.Sessions().Any(s=>s.State.Contains("récupérée")),"Récupération réelle après arrêt forcé");
-            await Wait(()=>{app!.Refresh();return app.MainWindowHandle!=IntPtr.Zero;},"Fenêtre après récupération");root=AutomationElement.FromHandle(app!.MainWindowHandle);Invoke(root,"Quitter");await app.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));Check(app.ExitCode==0,"Fermeture propre");
+            await Wait(()=>{app!.Refresh();return app.MainWindowHandle!=IntPtr.Zero;},"Fenêtre après récupération");root=AutomationElement.FromHandle(app!.MainWindowHandle);Console.WriteLine("Demande de fermeture UI asynchrone");var closingRoot=root;_=Task.Run(()=>Invoke(closingRoot,"Quitter"));await app.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));Check(app.ExitCode==0,"Fermeture propre");
             return 0;
         }
-        catch(Exception e){File.AppendAllText(Path.Combine(folder,"results.log"),e.ToString());Console.Error.WriteLine(e);return 1;}
+        catch(Exception e){try{using var bmp=new System.Drawing.Bitmap(1280,960);using var graphics=System.Drawing.Graphics.FromImage(bmp);graphics.CopyFromScreen(0,0,0,0,bmp.Size);bmp.Save(Path.Combine(folder,"echec-reel.png"));}catch(Exception capture){Console.WriteLine(capture.Message);}File.AppendAllText(Path.Combine(folder,"results.log"),e.ToString());Console.Error.WriteLine(e);return 1;}
         finally{if(game is not null&&!game.HasExited)game.Kill();if(app is not null&&!app.HasExited)app.Kill();Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();}
     }
 }

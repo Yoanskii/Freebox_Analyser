@@ -24,6 +24,16 @@ public sealed class Store
         CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
         INSERT OR IGNORE INTO schema_migrations VALUES(1);
         """; cmd.ExecuteNonQuery();
+        using var migration=c.BeginTransaction();
+        using var check=c.CreateCommand();check.Transaction=migration;check.CommandText="SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='baseline'";
+        if((long)check.ExecuteScalar()! == 0)
+        {
+            using var alter=c.CreateCommand();alter.Transaction=migration;alter.CommandText="ALTER TABLE sessions ADD COLUMN baseline TEXT";alter.ExecuteNonQuery();
+            using var read=c.CreateCommand();read.Transaction=migration;read.CommandText="SELECT data FROM sessions";
+            var sessions=new List<Session>();using(var reader=read.ExecuteReader()){while(reader.Read())sessions.Add(JsonSerializer.Deserialize<Session>(reader.GetString(0))!);}
+            foreach(var session in sessions){using var update=c.CreateCommand();update.Transaction=migration;update.CommandText="UPDATE sessions SET baseline=$baseline WHERE id=$id";update.Parameters.AddWithValue("$baseline",Stamp(session.BaselineStart));update.Parameters.AddWithValue("$id",session.Id);update.ExecuteNonQuery();}
+        }
+        using var mark=c.CreateCommand();mark.Transaction=migration;mark.CommandText="INSERT OR IGNORE INTO schema_migrations VALUES(2)";mark.ExecuteNonQuery();migration.Commit();
     }
     public static string Stamp(DateTimeOffset at) => at.ToUniversalTime().ToString("O");
     public void WriteProbes(IEnumerable<Probe> probes)
@@ -45,12 +55,13 @@ public sealed class Store
         using var reader = cmd.ExecuteReader(); var result = new List<T>(); while (reader.Read()) result.Add(JsonSerializer.Deserialize<T>(reader.GetString(0))!); return result;
     }
     public List<Session> Sessions() => Read<Session>("SELECT data FROM sessions ORDER BY start DESC", DateTimeOffset.MinValue, DateTimeOffset.MaxValue);
-    public void Save(Session s) => Execute("INSERT OR REPLACE INTO sessions(id,start,finish,data) VALUES($id,$at,$end,$data)", s.Id, s.Start, s, s.End);
+    public void Save(Session s) => Execute("INSERT OR REPLACE INTO sessions(id,start,finish,data,baseline) VALUES($id,$at,$end,$data,$baseline)", s.Id, s.Start, s, s.End);
     public void Save(Incident i) => Execute("INSERT OR REPLACE INTO incidents(id,start,data) VALUES($id,$at,$data)", i.Id, i.Start, i);
     public void Save(NetworkEvent e) => Execute("INSERT INTO network_events(at,data) VALUES($at,$data)", "", e.At, e);
     void Execute(string sql, string id, DateTimeOffset at, object data, DateTimeOffset? end = null)
     {
         using var c = Open(); using var cmd = c.CreateCommand(); cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("$baseline",data is Session session ? Stamp(session.BaselineStart) : DBNull.Value);
         cmd.Parameters.AddWithValue("$id", id); cmd.Parameters.AddWithValue("$at", Stamp(at));
         cmd.Parameters.AddWithValue("$end", end is null ? DBNull.Value : Stamp(end.Value)); cmd.Parameters.AddWithValue("$data", JsonSerializer.Serialize(data, data.GetType())); cmd.ExecuteNonQuery();
     }
@@ -71,9 +82,9 @@ public sealed class Store
         // Conserve toutes les données des sessions retenues et leurs baselines.
         cmd.CommandText = """
         DELETE FROM sessions WHERE finish IS NOT NULL AND finish < $cutoff;
-        DELETE FROM probes WHERE at < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE probes.at >= json_extract(s.data,'$.BaselineStart') AND (s.finish IS NULL OR probes.at <= s.finish));
-        DELETE FROM network_events WHERE at < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE network_events.at >= json_extract(s.data,'$.BaselineStart') AND (s.finish IS NULL OR network_events.at <= s.finish));
-        DELETE FROM incidents WHERE start < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE incidents.start >= json_extract(s.data,'$.BaselineStart'));
+        DELETE FROM probes WHERE at < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE probes.at >= s.baseline AND (s.finish IS NULL OR probes.at <= s.finish));
+        DELETE FROM network_events WHERE at < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE network_events.at >= s.baseline AND (s.finish IS NULL OR network_events.at <= s.finish));
+        DELETE FROM incidents WHERE start < $cutoff AND NOT EXISTS(SELECT 1 FROM sessions s WHERE incidents.start >= s.baseline);
         """;
         cmd.Parameters.AddWithValue("$cutoff", Stamp(cutoff)); cmd.ExecuteNonQuery();
     }
