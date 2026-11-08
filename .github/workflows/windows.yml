@@ -14,6 +14,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Vérifier la syntaxe PowerShell
+        shell: pwsh
+        run: |
+          Get-ChildItem build/*.ps1 | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { throw ($parseErrors | Out-String) }
+          }
       - name: Compiler, tester, publier
         shell: pwsh
         run: ./build/publish-win-x64.ps1

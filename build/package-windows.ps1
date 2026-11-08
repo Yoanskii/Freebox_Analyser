@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$IsccPath = '', [switch]$SkipPublish)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent

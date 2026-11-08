@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$Configuration = 'Release')
 $ErrorActionPreference = 'Stop'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
