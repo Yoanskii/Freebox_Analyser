@@ -20,7 +20,7 @@ Le runner utilisé est Windows Server 2025 Datacenter (image GitHub Actions wind
 - [Exécution Windows finale et journaux](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42524209453).
 - [Exécution complète précédente, avec installation et application installée](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42523907087).
 - Les résultats TRX, journaux UI, rapports de sondes loopback et captures réelles se trouvent dans l’artefact `FreeNetworkMonitor-Windows` de l’exécution.
-- Les fichiers de livraison et leurs SHA-256 sont publiés dans la release `v1.0.0-rc.1`.
+- Les fichiers de livraison sont dans [l’artefact Windows validé](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42524209453/artifacts/13634946294) ; les SHA-256 sont dans [SHA256SUMS.txt](SHA256SUMS.txt). L’authentification a refusé l’envoi des binaires à uploads.github.com comme pièces jointes de Release. Le téléchargement d’un artefact Actions nécessite une connexion GitHub ; l’application fonctionne sans compte. En cas d’expiration de l’artefact, relancer le workflow Windows.
 
 ## Corrections issues des essais
 

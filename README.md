@@ -2,7 +2,7 @@
 
 Application de bureau **Windows 10/11 x64**, C# / .NET 10 / WPF, entièrement en français. Analyse locale avant et pendant les sessions de jeu. Dépôt publié sous le nom **Freebox_Analyser**.
 
-> **Version candidate 1.0.0 RC1** : [Télécharger l’installateur Windows](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/FreeNetworkMonitor-Setup-1.0.0.exe) · [ZIP portable](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/FreeNetworkMonitor-win-x64.zip) · [SHA-256](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/SHA256SUMS.txt).
+> **Version candidate 1.0.0 RC1** : [Télécharger le paquet Windows validé (installateur + ZIP portable)](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42524209453/artifacts/13634946294) · [SHA-256](docs/SHA256SUMS.txt).
 >
 > **37 tests réussis sur Linux et Windows**, interface réellement pilotée, installateur et application installée testés : [résultats](docs/VALIDATION.md), [exécution Windows complète](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42524209453). Les essais sur votre Freebox et les performances en jeu restent à réaliser.
 

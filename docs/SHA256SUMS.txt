@@ -1,0 +1,2 @@
+cf4d4a57f8d0e218d8c020b41e90942d7077c134ec54ba428e3ccbd637814e98  FreeNetworkMonitor-Setup-1.0.0.exe
+e9285d2db3bd4612c11f06515dc0aeb4d048b80daa0363b424977d64d1188297  FreeNetworkMonitor-win-x64.zip
