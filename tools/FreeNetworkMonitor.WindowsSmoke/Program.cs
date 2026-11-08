@@ -38,7 +38,7 @@ public static class Program
             await Wait(()=>File.Exists(Path.Combine(settings.ExportFolder,session.Id+".html")),"Rapport généré automatiquement");
             var report=new Reports(db).Create(session,settings);Check(report.Probes.Count>0&&report.Targets.Single().During.Received>0,"Rapport cohérent avec SQLite et mesures réelles");Check(!report.BaselineComplete&&report.BaselineAvailableMinutes>0,"Baseline courte indiquée incomplète");
             foreach(var tab in new[]{"Sessions","Paramètres","Tableau de bord"}){((SelectionItemPattern)Find(root,tab).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();Check(true,"Navigation : "+tab);}
-            try{using var bmp=new System.Drawing.Bitmap(1280,960);using var graphics=System.Drawing.Graphics.FromImage(bmp);graphics.CopyFromScreen(0,0,0,0,bmp.Size);bmp.Save(Path.Combine(folder,"desktop-reel.png"));}catch(Exception e){Console.WriteLine("Capture indisponible : "+e.Message);}
+            try{using var bmp=new System.Drawing.Bitmap(System.Windows.Forms.Screen.PrimaryScreen!.Bounds.Width,System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height);using var graphics=System.Drawing.Graphics.FromImage(bmp);graphics.CopyFromScreen(0,0,0,0,bmp.Size);bmp.Save(Path.Combine(folder,"desktop-reel.png"));}catch(Exception e){Console.WriteLine("Capture indisponible : "+e.Message);}
             // Crash réel : doit récupérer la session au prochain démarrage.
             Invoke(root,"Démarrer une session manuelle");await Wait(()=>db.Sessions().Any(s=>s.End is null),"Session avant arrêt forcé");await Task.Delay(3000);
             app.Kill();await app.WaitForExitAsync();app=Process.Start(new ProcessStartInfo(args[0],"--data-dir \""+data+"\""){UseShellExecute=false});
@@ -46,7 +46,7 @@ public static class Program
             await Wait(()=>{app!.Refresh();return app.MainWindowHandle!=IntPtr.Zero;},"Fenêtre après récupération");root=AutomationElement.FromHandle(app!.MainWindowHandle);Console.WriteLine("Demande de fermeture UI asynchrone");var closingRoot=root;_=Task.Run(()=>Invoke(closingRoot,"Quitter"));await app.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));Check(app.ExitCode==0,"Fermeture propre");
             return 0;
         }
-        catch(Exception e){try{using var bmp=new System.Drawing.Bitmap(1280,960);using var graphics=System.Drawing.Graphics.FromImage(bmp);graphics.CopyFromScreen(0,0,0,0,bmp.Size);bmp.Save(Path.Combine(folder,"echec-reel.png"));}catch(Exception capture){Console.WriteLine(capture.Message);}File.AppendAllText(Path.Combine(folder,"results.log"),e.ToString());Console.Error.WriteLine(e);return 1;}
+        catch(Exception e){try{using var bmp=new System.Drawing.Bitmap(System.Windows.Forms.Screen.PrimaryScreen!.Bounds.Width,System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height);using var graphics=System.Drawing.Graphics.FromImage(bmp);graphics.CopyFromScreen(0,0,0,0,bmp.Size);bmp.Save(Path.Combine(folder,"echec-reel.png"));}catch(Exception capture){Console.WriteLine(capture.Message);}File.AppendAllText(Path.Combine(folder,"results.log"),e.ToString());Console.Error.WriteLine(e);return 1;}
         finally{if(game is not null&&!game.HasExited)game.Kill();if(app is not null&&!app.HasExited)app.Kill();Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();}
     }
 }

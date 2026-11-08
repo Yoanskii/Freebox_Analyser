@@ -16,6 +16,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        MinWidth=Math.Min(900,SystemParameters.WorkArea.Width-32);MinHeight=Math.Min(650,SystemParameters.WorkArea.Height-32);
+        Width=Math.Min(1280,SystemParameters.WorkArea.Width-48);Height=Math.Min(900,SystemParameters.WorkArea.Height-48);WindowStartupLocation=WindowStartupLocation.CenterScreen;
         var folder=App.DataFolder;
         Log.Folder=Path.Combine(folder,"logs");
         runtime=new(new Store(Path.Combine(folder,"monitor.db")));vm=new(runtime);DataContext=vm;
@@ -26,7 +28,7 @@ public partial class MainWindow : Window
         runtime.SessionEnded+=s=>Dispatcher.InvokeAsync(async()=>{await vm.LoadHistory();vm.SelectedSession=vm.Sessions.FirstOrDefault(x=>x.Session.Id==s.Id);if(runtime.Settings.Notifications)tray.ShowBalloonTip(4000,"Rapport disponible",$"{s.Game} : consultez la rubrique Sessions.",System.Windows.Forms.ToolTipIcon.Info);});
         SystemEvents.PowerModeChanged+=Power;
         Loaded+=async(_,_)=>{await runtime.StartAsync();timer.Start();if(Environment.GetCommandLineArgs().Contains("--minimized"))Hide();};
-        Closing+=async(_,e)=>{if(disposing)return;if(!exiting){e.Cancel=true;Hide();return;}e.Cancel=true;timer.Stop();IsEnabled=false;await runtime.DisposeAsync();SystemEvents.PowerModeChanged-=Power;tray.Dispose();disposing=true;Close();};
+        Closing+=async(_,e)=>{if(disposing)return;if(!exiting){e.Cancel=true;Hide();return;}e.Cancel=true;timer.Stop();IsEnabled=false;await runtime.DisposeAsync();SystemEvents.PowerModeChanged-=Power;tray.Dispose();disposing=true;_=Dispatcher.BeginInvoke(new Action(Close));};
     }
     void Power(object sender,PowerModeChangedEventArgs e)=>runtime.PowerEvent(e.Mode==PowerModes.Suspend?"Mise en veille":e.Mode==PowerModes.Resume?"Reprise après veille":"Changement alimentation");
     void Restore(){Show();WindowState=WindowState.Normal;Activate();}

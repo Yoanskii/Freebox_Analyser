@@ -20,6 +20,13 @@ public class RobustnessTests
     {
         var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());try{var db=new Store(Path.Combine(dir,"m.db"));db.Initialize();db.WriteProbes([MetricsTests.P(0)]);db.SaveSettings(new());db.BackupArchive(Path.Combine(dir,"all.zip"));ZipFile.ExtractToDirectory(Path.Combine(dir,"all.zip"),Path.Combine(dir,"unzip"));var restored=new Store(Path.Combine(dir,"unzip","monitor.db"));restored.Initialize();Assert.Single(restored.ReadProbes(DateTimeOffset.MinValue,DateTimeOffset.MaxValue));db.DeleteAll();Assert.Empty(db.ReadProbes(DateTimeOffset.MinValue,DateTimeOffset.MaxValue));Assert.Empty(db.Sessions());}finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
     }
+    [Fact] public void VersionOneDatabaseMigratesAndReopensIdempotently()
+    {
+        var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());Directory.CreateDirectory(dir);var path=Path.Combine(dir,"m.db");
+        try{using(var c=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+path)){c.Open();using var cmd=c.CreateCommand();cmd.CommandText="CREATE TABLE sessions(id TEXT PRIMARY KEY,start TEXT NOT NULL,finish TEXT,data TEXT NOT NULL); INSERT INTO sessions VALUES('s',$start,$finish,$data)";var now=DateTimeOffset.UnixEpoch.AddDays(1);var session=new Session("s","Migration",now,now.AddMinutes(1),now.AddMinutes(-15),"Complète");cmd.Parameters.AddWithValue("$start",Store.Stamp(session.Start));cmd.Parameters.AddWithValue("$finish",Store.Stamp(session.End!.Value));cmd.Parameters.AddWithValue("$data",System.Text.Json.JsonSerializer.Serialize(session));cmd.ExecuteNonQuery();}
+        var store=new Store(path);store.Initialize();store.Initialize();Assert.Single(store.Sessions());using var reopened=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+path);reopened.Open();using var check=reopened.CreateCommand();check.CommandText="SELECT baseline FROM sessions WHERE id='s'";Assert.Equal(Store.Stamp(DateTimeOffset.UnixEpoch.AddDays(1).AddMinutes(-15)),check.ExecuteScalar());
+        }finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+    }
     sealed class OfflineNetwork:INetworkProvider {public NetworkState Get()=>new("","Absent","Hors ligne",null,false);}
     sealed class ForbiddenProbe:IProbeClient {public int Calls;public Task<Probe> SendAsync(Target t,NetworkState n,int timeout,CancellationToken token){Interlocked.Increment(ref Calls);throw new InvalidOperationException("Ne doit pas sonder hors ligne");}}
     [Fact] public async Task OfflineRuntimeWritesEventWithoutInventingProbes()

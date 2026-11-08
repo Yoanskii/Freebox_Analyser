@@ -19,7 +19,7 @@ public sealed class ProbeChart : FrameworkElement
         void Text(string text,double x,double y,Brush? brush=null)=>dc.DrawText(new FormattedText(text,CultureInfo.GetCultureInfo("fr-FR"),FlowDirection.LeftToRight,new Typeface("Segoe UI"),11,brush??Brushes.LightSteelBlue,VisualTreeHelper.GetDpi(this).PixelsPerDip),new Point(x,y));
         double X(Probe p)=>60+w*(p.At-end.AddMinutes(-minutes)).TotalMinutes/minutes;
         double Y(double rtt)=>25+h*(1-rtt/max);
-        for(int i=0;i<4;i++){double y=25+h*i/3;dc.DrawLine(pen,new Point(60,y),new Point(60+w,y));Text($"{max*(3-i)/3:F0}",5,y-7);}
+        for(int i=0;i<4;i++){double y=25+h*i/3;dc.DrawLine(pen,new Point(60,y),new Point(60+w,y));Text($"{max*(3-i)/3:F1}",5,y-7);}
         Text("ms",5,3);Text($"{end.AddMinutes(-minutes).ToLocalTime():HH:mm:ss}",60,25+h+25);Text($"{end.ToLocalTime():HH:mm:ss}",Math.Max(65,60+w-65),25+h+25);Text($"● RTT   | Échec ICMP   ▪ Invalide   · fenêtre {minutes:F2} min",Math.Max(80,w/2-120),3,cyan);
         Probe? previous=null;
         foreach(var bucket in visible.GroupBy(p=>(int)X(p)))
