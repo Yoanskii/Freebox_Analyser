@@ -104,7 +104,7 @@ public sealed class ViewModel : Observable
             }
             var oldKey=selectedKey;Rows.Clear();foreach(var row in rows)Rows.Add(row);selectedKey=rows.Any(x=>x.Key==oldKey)?oldKey:rows.FirstOrDefault()?.Key;Notify(nameof(SelectedRow));
             DiagnosisText=runtime.Network.Online?Diagnosis.Describe(diagnostic,runtime.Settings):"Interface hors ligne : aucune sonde non lancée n’est comptée comme perdue.";
-            BaselineText=$"Baseline disponible : {(lastProbes.Count==0?0:Math.Min(15,(now-lastProbes[0].At).TotalMinutes)):F1} / 15 min. La couverture de chaque cible est détaillée dans le rapport.";
+            BaselineText=$"Baseline disponible : {N(lastProbes.Count==0?0:Math.Min(15,(now-lastProbes[0].At).TotalMinutes))} / 15 min. La couverture de chaque cible est détaillée dans le rapport.";
             foreach(var property in new[]{nameof(Status),nameof(SessionText),nameof(IncidentCount),nameof(DiagnosisText),nameof(BaselineText)})Notify(property);
             UpdateCards();
         }
@@ -121,14 +121,14 @@ public sealed class ViewModel : Observable
     public async Task LoadHistory()
     {
         if(!runtime.Ready)return;
-        var data=await Task.Run(()=>runtime.Store.Sessions().Where(s=>(string.IsNullOrWhiteSpace(Filter)||s.Game.Contains(Filter,StringComparison.CurrentCultureIgnoreCase)||s.Start.ToLocalTime().ToString("d").Contains(Filter))&&(!FromDate.HasValue||s.Start.ToLocalTime().Date>=FromDate.Value.Date)&&(!ToDate.HasValue||s.Start.ToLocalTime().Date<=ToDate.Value.Date)).Take(500).Select(s=>new SessionRow(s,s.Game,s.Start.ToLocalTime().ToString("g"),s.End is null?"En cours":$"{(s.End.Value-s.Start).TotalMinutes:F1} min",s.State,runtime.Store.HasBaseline(s)?"Disponible (détails dans le rapport)":"Absente",runtime.Store.ReadIncidents(s.Start,s.End??DateTimeOffset.UtcNow).Count)).ToList());
+        var data=await Task.Run(()=>runtime.Store.Sessions().Where(s=>(string.IsNullOrWhiteSpace(Filter)||s.Game.Contains(Filter,StringComparison.CurrentCultureIgnoreCase)||s.Start.ToLocalTime().ToString("d",CultureInfo.GetCultureInfo("fr-FR")).Contains(Filter))&&(!FromDate.HasValue||s.Start.ToLocalTime().Date>=FromDate.Value.Date)&&(!ToDate.HasValue||s.Start.ToLocalTime().Date<=ToDate.Value.Date)).Take(500).Select(s=>new SessionRow(s,s.Game,s.Start.ToLocalTime().ToString("g",CultureInfo.GetCultureInfo("fr-FR")),s.End is null?"En cours":$"{N((s.End.Value-s.Start).TotalMinutes)} min",s.State,runtime.Store.HasBaseline(s)?"Disponible (détails dans le rapport)":"Absente",runtime.Store.ReadIncidents(s.Start,s.End??DateTimeOffset.UtcNow).Count)).ToList());
         var id=selectedSession?.Session.Id;Sessions.Clear();foreach(var row in data)Sessions.Add(row);if(id is not null)SelectedSession=Sessions.FirstOrDefault(s=>s.Session.Id==id);
     }
     async Task Detail()
     {
         var selected=selectedSession;if(selected is null)return;
         try {var r=await Task.Run(()=>reports.Create(selected.Session,runtime.Settings));if(selectedSession!=selected)return;
-            SessionDetail=$"{r.Summary}\nBaseline : {r.BaselineAvailableMinutes:F1}/15 min — {(r.BaselineComplete?"complète":"incomplète")}.\n"+string.Join("\n",r.Targets.Select(t=>$"{t.Name} ({t.Address}) : avant {t.Before.Sent} sondes, {N(t.Before.LossPercent)} % / pendant {t.During.Sent} sondes, {N(t.During.LossPercent)} %, RTT moy./méd./p95/max {N(t.During.MeanMs)}/{N(t.During.MedianMs)}/{N(t.During.P95Ms)}/{N(t.During.MaxMs)} ms, gigue {N(t.During.JitterMs)} ms."));Notify(nameof(SessionDetail));
+            SessionDetail=$"{r.Summary}\nBaseline : {N(r.BaselineAvailableMinutes)}/15 min — {(r.BaselineComplete?"complète":"incomplète")}.\n"+string.Join("\n",r.Targets.Select(t=>$"{t.Name} ({t.Address}) : avant {t.Before.Sent} sondes, {N(t.Before.LossPercent)} % / pendant {t.During.Sent} sondes, {N(t.During.LossPercent)} %, RTT moy./méd./p95/max {N(t.During.MeanMs)}/{N(t.During.MedianMs)}/{N(t.During.P95Ms)}/{N(t.During.MaxMs)} ms, gigue {N(t.During.JitterMs)} ms."));Notify(nameof(SessionDetail));
         }catch(Exception e){SessionDetail=e.Message;Notify(nameof(SessionDetail));Log.Write(e);}
     }
     async Task OpenReport()

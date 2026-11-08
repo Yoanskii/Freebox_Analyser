@@ -7,7 +7,7 @@ public partial class App : System.Windows.Application
     public static string DataFolder {get;private set;}=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FreeNetworkMonitor");
     protected override void OnStartup(StartupEventArgs e)
     {
-        var culture=System.Globalization.CultureInfo.GetCultureInfo("fr-FR");System.Globalization.CultureInfo.DefaultThreadCurrentCulture=culture;System.Globalization.CultureInfo.DefaultThreadCurrentUICulture=culture;
+        var culture=System.Globalization.CultureInfo.GetCultureInfo("fr-FR");System.Globalization.CultureInfo.CurrentCulture=culture;System.Globalization.CultureInfo.CurrentUICulture=culture;System.Globalization.CultureInfo.DefaultThreadCurrentCulture=culture;System.Globalization.CultureInfo.DefaultThreadCurrentUICulture=culture;
         FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),new FrameworkPropertyMetadata(System.Windows.Markup.XmlLanguage.GetLanguage("fr-FR")));
         base.OnStartup(e);
         int index=Array.IndexOf(e.Args,"--data-dir");if(index>=0&&index+1<e.Args.Length)DataFolder=Path.GetFullPath(e.Args[index+1]);

@@ -19,8 +19,8 @@ public sealed class ProbeChart : FrameworkElement
         void Text(string text,double x,double y,Brush? brush=null)=>dc.DrawText(new FormattedText(text,CultureInfo.GetCultureInfo("fr-FR"),FlowDirection.LeftToRight,new Typeface("Segoe UI"),11,brush??Brushes.LightSteelBlue,VisualTreeHelper.GetDpi(this).PixelsPerDip),new Point(x,y));
         double X(Probe p)=>60+w*(p.At-end.AddMinutes(-minutes)).TotalMinutes/minutes;
         double Y(double rtt)=>25+h*(1-rtt/max);
-        for(int i=0;i<4;i++){double y=25+h*i/3;dc.DrawLine(pen,new Point(60,y),new Point(60+w,y));Text($"{max*(3-i)/3:F1}",5,y-7);}
-        Text("ms",5,3);Text($"{end.AddMinutes(-minutes).ToLocalTime():HH:mm:ss}",60,25+h+25);Text($"{end.ToLocalTime():HH:mm:ss}",Math.Max(65,60+w-65),25+h+25);Text($"● RTT   | Échec ICMP   ▪ Invalide   · fenêtre {minutes:F2} min",Math.Max(80,w/2-120),3,cyan);
+        for(int i=0;i<4;i++){double y=25+h*i/3;dc.DrawLine(pen,new Point(60,y),new Point(60+w,y));Text($"{(max*(3-i)/3).ToString("F1",CultureInfo.GetCultureInfo("fr-FR"))}",5,y-7);}
+        Text("ms",5,3);Text($"{end.AddMinutes(-minutes).ToLocalTime():HH:mm:ss}",60,25+h+25);Text($"{end.ToLocalTime():HH:mm:ss}",Math.Max(65,60+w-65),25+h+25);Text($"● RTT   | Échec ICMP   ▪ Invalide   · fenêtre {minutes.ToString("F2",CultureInfo.GetCultureInfo("fr-FR"))} min",Math.Max(80,w/2-120),3,cyan);
         Probe? previous=null;
         foreach(var bucket in visible.GroupBy(p=>(int)X(p)))
         {
@@ -38,6 +38,6 @@ public sealed class ProbeChart : FrameworkElement
     void Hover(object sender,MouseEventArgs e)
     {
         if(visible.Length==0||ActualWidth<150)return;var point=e.GetPosition(this);var at=end.AddMinutes(-minutes+minutes*(point.X-60)/(ActualWidth-85));var p=visible.MinBy(p=>Math.Abs((p.At-at).TotalSeconds));
-        if(p is not null)ToolTip=$"{p.At.ToLocalTime():HH:mm:ss.fff} · {p.Address}\n{p.Outcome} · {(p.RttMs.HasValue?$"{p.RttMs:F2} ms":"RTT absent")} · {p.Detail}";
+        if(p is not null)ToolTip=$"{p.At.ToLocalTime():HH:mm:ss.fff} · {p.Address}\n{p.Outcome} · {(p.RttMs.HasValue?$"{p.RttMs.Value.ToString("F2",CultureInfo.GetCultureInfo("fr-FR"))} ms":"RTT absent")} · {p.Detail}";
     }
 }
