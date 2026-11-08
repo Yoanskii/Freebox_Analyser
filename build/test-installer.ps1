@@ -6,6 +6,9 @@ $log = Join-Path $root 'artifacts/installer-test.log'
 $installed = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$destination`"", "/LOG=`"$log`"") -Wait -PassThru
 if ($installed.ExitCode -ne 0) { throw "Installation échouée : $($installed.ExitCode)" }
 if (-not (Test-Path "$destination/FreeNetworkMonitor.App.exe")) { throw 'Application installée absente.' }
+# Vérifier aussi l’exécutable réellement installé, pas seulement la version portable.
+dotnet run --project "$root/tools/FreeNetworkMonitor.WindowsSmoke" -c Release --no-build -- "$destination/FreeNetworkMonitor.App.exe" "$root/artifacts/installed-smoke"
+if ($LASTEXITCODE -ne 0) { throw 'Échec du test de l’application installée.' }
 # Le stockage des mesures ne fait jamais partie du dossier programme.
 $uninstalled = Start-Process "$destination/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
 if ($uninstalled.ExitCode -ne 0) { throw "Désinstallation échouée : $($uninstalled.ExitCode)" }

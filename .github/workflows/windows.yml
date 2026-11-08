@@ -43,5 +43,6 @@ jobs:
             artifacts/installer/*.exe
             artifacts/tests/**
             artifacts/windows-smoke/**
+            artifacts/installed-smoke/**
             artifacts/installer-test.log
           if-no-files-found: error
