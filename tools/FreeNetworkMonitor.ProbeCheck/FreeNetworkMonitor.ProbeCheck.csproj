@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../../src/FreeNetworkMonitor.Network/FreeNetworkMonitor.Network.csproj"/><ProjectReference Include="../../src/FreeNetworkMonitor.Persistence/FreeNetworkMonitor.Persistence.csproj"/></ItemGroup></Project>
