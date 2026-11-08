@@ -2,7 +2,13 @@
 
 Application de bureau **Windows 10/11 x64**, C# / .NET 10 / WPF, entièrement en français. Analyse locale avant et pendant les sessions de jeu. Dépôt publié sous le nom **Freebox_Analyser**.
 
-> État de validation : voir [docs/VALIDATION.md](docs/VALIDATION.md) et [les exécutions Windows](../../actions). Une compilation réussie ne valide pas votre connexion Freebox ni les performances en jeu.
+> **Version candidate 1.0.0 RC1** : [Télécharger l’installateur Windows](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/FreeNetworkMonitor-Setup-1.0.0.exe) · [ZIP portable](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/FreeNetworkMonitor-win-x64.zip) · [SHA-256](https://github.com/Yoanskii/Freebox_Analyser/releases/download/v1.0.0-rc.1/SHA256SUMS.txt).
+>
+> **37 tests réussis sur Linux et Windows**, interface réellement pilotée, installateur et application installée testés : [résultats](docs/VALIDATION.md), [exécution Windows complète](https://github.com/Yoanskii/Freebox_Analyser/actions/runs/42524209453). Les essais sur votre Freebox et les performances en jeu restent à réaliser.
+
+![Capture réelle de l’application sur Windows](docs/capture-windows-reelle.png)
+
+*Capture du runner Windows avec sondes loopback réelles et processus de test configuré ; aucune mesure Internet ni session ARC Raiders n’est simulée.*
 
 ## Installer et lancer
 

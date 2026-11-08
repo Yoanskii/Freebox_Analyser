@@ -4,7 +4,7 @@ Le code livré implémente les fonctions ci-dessous ; **implémenté n’est pas
 
 | Critère | Implémentation et preuve prévue | Validation matérielle restante |
 |---|---|---|
-| A01 | Publication autonome x64, Inno Setup par utilisateur, test installation/désinstallation CI | Installation interactive Win10/11, conservation données personnelles |
+| A01 | Publication autonome x64, Inno Setup par utilisateur, installation / application installée / désinstallation validées en CI | Installation interactive Win10/11, conservation données personnelles |
 | A02 | Ping réel horodaté et SQLite ; ProbeCheck et loopback Windows CI | Passerelle/Internet Freebox, câble retiré/reconnecté |
 | A03 | Test déterministe 100 éligibles / 7 timeouts = 7 %, invalides exclues | Comparaison UI/export sur votre PC |
 | A04 | 3 succès requis ; cible sans réponse → non mesurable ; tests dédiés | Cible qui filtre ICMP sur votre connexion |
@@ -15,7 +15,7 @@ Le code livré implémente les fonctions ci-dessous ; **implémenté n’est pas
 | A09 | Incidents par cible, preuves, fermeture/hystérésis, notifications temporisées ; tests | Notifications Windows et incidents matériels |
 | A10 | WAL/transactions/récupération, annulation, événements réseau/veille, test arrêt forcé CI | Veille physique, changement carte, saturation disque |
 | A11 | WPF natif français, trois rubriques, dark mode, chart zoom/survol, UI Automation CI | DPI 100–200 %, clavier et 1080p/1440p |
-| A12 | xUnit, tests SQLite/rapports/règles/runtime ; scripts et pipeline Windows | Compléter les scénarios matériels ci-dessus |
+| A12 | 37 tests xUnit réussis Linux/Windows, tests SQLite/rapports/règles/runtime ; pipeline Windows complet réussi | Compléter les scénarios matériels ci-dessus |
 
 ## Fonctions non implémentées / limites explicites
 
