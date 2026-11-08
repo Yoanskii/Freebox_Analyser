@@ -14,6 +14,9 @@ public sealed class Runtime : IAsyncDisposable
     public string? Error { get; private set; }
     public event Action? Changed;
     public event Action<Session>? SessionEnded;
+    public event Action<Incident>? IncidentOpened;
+    readonly Dictionary<string, IncidentDetector> detectors = [];
+    readonly Dictionary<string,string> endpoints = [];
     readonly SessionTracker tracker = new();
     readonly INetworkProvider networkProvider;
     readonly IProbeClient probeClient;
@@ -36,7 +39,11 @@ public sealed class Runtime : IAsyncDisposable
     public void PowerEvent(string kind) => commands.Enqueue(() => { Record("Alimentation", kind); lastTick = DateTimeOffset.UtcNow; });
     public void Record(string kind, string message) => Store.Save(new NetworkEvent(DateTimeOffset.UtcNow, kind, message));
     public void Flush() { if (pending.Count == 0) return; Store.WriteProbes(pending); pending.Clear(); lastFlush = DateTimeOffset.UtcNow; }
-    void Finish(Session? session) { if (session is null) return; Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game); SessionEnded?.Invoke(session); }
+    void Finish(Session? session) { if (session is null) return; Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game);
+        var report = new FreeNetworkMonitor.Reporting.Reports(Store).Create(session, Settings);
+        var folder = string.IsNullOrWhiteSpace(Settings.ExportFolder) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FreeNetworkMonitor", "reports") : Settings.ExportFolder;
+        FreeNetworkMonitor.Reporting.Reports.Export(report, Path.Combine(folder, session.Id));
+        SessionEnded?.Invoke(session); }
     async Task Run()
     {
         try
@@ -99,9 +106,21 @@ public sealed class Runtime : IAsyncDisposable
         }
     }
     // Extensions d’analyse ajoutées dans la phase suivante.
-    void Accept(Probe p) { }
-    void OnNetworkChanged(DateTimeOffset now) { }
-    void CloseIncidents(DateTimeOffset now) { }
+    void Accept(Probe p)
+    {
+        string endpoint = p.Address + "|" + p.InterfaceId;
+        if (!endpoints.TryGetValue(p.TargetId, out var old) || old != endpoint)
+        {
+            if (detectors.TryGetValue(p.TargetId, out var prior) && prior.Close(p.At) is Incident closed) Store.Save(closed);
+            detectors[p.TargetId] = new(); endpoints[p.TargetId] = endpoint;
+            Record("Destination", $"{p.TargetName} : {endpoint} ; validation ICMP renouvelée.");
+        }
+        var result = detectors[p.TargetId].Observe(p, Settings);
+        if (result.Opened is not null) { Store.Save(result.Opened); IncidentOpened?.Invoke(result.Opened); }
+        if (result.Closed is not null) Store.Save(result.Closed);
+    }
+    void OnNetworkChanged(DateTimeOffset now) { CloseIncidents(now); detectors.Clear(); endpoints.Clear(); }
+    void CloseIncidents(DateTimeOffset now) { foreach(var d in detectors.Values) if(d.Close(now) is Incident i) Store.Save(i); }
     public async ValueTask DisposeAsync() { stop.Cancel(); if (worker is not null) await worker; stop.Dispose(); }
 }
 public static class Log
