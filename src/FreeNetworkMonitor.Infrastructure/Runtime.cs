@@ -48,7 +48,7 @@ public sealed class Runtime : IAsyncDisposable
     public void TogglePause() => commands.Enqueue(() => { Paused = !Paused; Record("Surveillance", Paused ? "Surveillance suspendue" : "Surveillance reprise"); });
     public void ManualStart(string name) => commands.Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
     public void ManualEnd() => commands.Enqueue(() => Finish(tracker.End(DateTimeOffset.UtcNow, suppressAuto: true)));
-    public void PowerEvent(string kind) => commands.Enqueue(() => { Record("Alimentation", kind); lastTick = DateTimeOffset.UtcNow; });
+    public void PowerEvent(string kind) { var at=DateTimeOffset.UtcNow; commands.Enqueue(() => { Store.Save(new NetworkEvent(at,"Alimentation",kind)); }); }
     public void Record(string kind, string message) => Store.Save(new NetworkEvent(DateTimeOffset.UtcNow, kind, message));
     public void Flush() { if (pending.Count == 0) return; Store.WriteProbes(pending); pending.Clear(); lastFlush = DateTimeOffset.UtcNow; }
     void Finish(Session? session) { if (session is null) return; Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game);

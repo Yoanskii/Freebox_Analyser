@@ -18,6 +18,7 @@ jobs:
         shell: pwsh
         run: ./build/publish-win-x64.ps1
       - name: Tests réels Windows et interface
+        timeout-minutes: 3
         shell: pwsh
         run: |
           dotnet run --project tools/FreeNetworkMonitor.WindowsSmoke -c Release -- "$PWD/artifacts/publish/win-x64/FreeNetworkMonitor.App.exe" "$PWD/artifacts/windows-smoke"

@@ -11,7 +11,7 @@ public sealed record NetworkState(string Id, string Name, string Kind, string? G
 public sealed record NetworkEvent(DateTimeOffset At, string Kind, string Message);
 public sealed record Game(string Id, string Name, string ProcessName, string? Path = null, bool Enabled = true);
 public sealed record Session(string Id, string Game, DateTimeOffset Start, DateTimeOffset? End,
-    DateTimeOffset BaselineStart, string State = "En cours", string? Executable = null);
+    DateTimeOffset BaselineStart, string State = "En cours", string? Executable = null, string? GameId = null);
 public sealed record Incident(string Id, string TargetId, DateTimeOffset Start, DateTimeOffset? End, string Reason,
     int Eligible, int Failed, double? P95Ms);
 public sealed record Statistics(int Total, int Sent, int Received, int Failed, int Invalid, double? LossPercent,
