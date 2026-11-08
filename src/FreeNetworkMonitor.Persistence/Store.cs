@@ -93,7 +93,7 @@ public sealed class Store
     public void BackupArchive(string destination)
     {
         string temp=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(temp);
-        try{using(var source=Open())using(var backup=new SqliteConnection("Data Source="+Path.Combine(temp,"monitor.db"))){backup.Open();source.BackupDatabase(backup);}
+        try{using(var source=Open())using(var backup=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=Path.Combine(temp,"monitor.db"),Pooling=false}.ToString())){backup.Open();source.BackupDatabase(backup);}
         File.WriteAllText(Path.Combine(temp,"settings.json"),JsonSerializer.Serialize(LoadSettings(),new JsonSerializerOptions{WriteIndented=true}));
         foreach(var name in new[]{"reports","logs"}){var source=Path.Combine(Path.GetDirectoryName(DatabasePath)!,name);if(!Directory.Exists(source))continue;foreach(var file in Directory.EnumerateFiles(source,"*",SearchOption.AllDirectories)){var dest=Path.Combine(temp,name,Path.GetRelativePath(source,file));Directory.CreateDirectory(Path.GetDirectoryName(dest)!);File.Copy(file,dest);}}
         System.IO.Compression.ZipFile.CreateFromDirectory(temp,destination);

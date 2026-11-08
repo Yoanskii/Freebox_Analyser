@@ -27,6 +27,19 @@ public class RobustnessTests
         var store=new Store(path);store.Initialize();store.Initialize();Assert.Single(store.Sessions());using var reopened=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+path);reopened.Open();using var check=reopened.CreateCommand();check.CommandText="SELECT baseline FROM sessions WHERE id='s'";Assert.Equal(Store.Stamp(DateTimeOffset.UnixEpoch.AddDays(1).AddMinutes(-15)),check.ExecuteScalar());
         }finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
     }
+    sealed class OnlineNetwork:INetworkProvider {public NetworkState Get()=>new("test","Sonde injectée du test","Test","127.0.0.1",true);}
+    sealed class DelayedProbe:IProbeClient
+    {
+        public readonly TaskCompletionSource Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Release=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<Probe> SendAsync(Target t,NetworkState n,int timeout,CancellationToken token){var at=DateTimeOffset.UtcNow;Started.TrySetResult();await Release.Task.WaitAsync(token);return new(at,t.Id,t.Name,t.Host,n.Id,ProbeOutcome.Success,10);}
+    }
+    [Fact] public async Task AutomaticReportIncludesProbeStartedBeforeSessionEnd()
+    {
+        var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());var probe=new DelayedProbe();try{var db=new Store(Path.Combine(dir,"m.db"));db.Initialize();db.SaveSettings(new Settings{Targets=[new("t","Test injecté","127.0.0.1")],Games=[]});var ended=new TaskCompletionSource<Session>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using(var runtime=new Runtime(db,new OnlineNetwork(),probe)){runtime.SessionEnded+=s=>ended.TrySetResult(s);await runtime.StartAsync();for(int i=0;i<100&&!runtime.Ready;i++)await Task.Delay(20);runtime.ManualStart("Sonde en vol");await probe.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));runtime.ManualEnd();await Task.Delay(300);Assert.False(ended.Task.IsCompleted);probe.Release.TrySetResult();var session=await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));var json=File.ReadAllText(Path.Combine(dir,"reports",session.Id+".json"));using var document=System.Text.Json.JsonDocument.Parse(json);Assert.Equal(1,document.RootElement.GetProperty("Targets")[0].GetProperty("During").GetProperty("Received").GetInt32());}
+        }finally{probe.Release.TrySetResult();Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+    }
     sealed class OfflineNetwork:INetworkProvider {public NetworkState Get()=>new("","Absent","Hors ligne",null,false);}
     sealed class ForbiddenProbe:IProbeClient {public int Calls;public Task<Probe> SendAsync(Target t,NetworkState n,int timeout,CancellationToken token){Interlocked.Increment(ref Calls);throw new InvalidOperationException("Ne doit pas sonder hors ligne");}}
     [Fact] public async Task OfflineRuntimeWritesEventWithoutInventingProbes()

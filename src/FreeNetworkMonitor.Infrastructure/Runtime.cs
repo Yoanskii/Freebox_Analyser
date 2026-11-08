@@ -24,7 +24,8 @@ public sealed class Runtime : IAsyncDisposable
     readonly IProbeClient probeClient;
     readonly ProcessDetector detector = new();
     readonly CancellationTokenSource stop = new();
-    readonly ConcurrentQueue<Action> commands = new();
+    readonly ConcurrentQueue<Func<Task>> commands = new();
+    void Enqueue(Action action)=>commands.Enqueue(()=>{action();return Task.CompletedTask;});
     readonly List<Probe> recent = [];
     readonly List<Probe> pending = [];
     readonly Dictionary<string, Task<Probe>> flights = [];
@@ -44,14 +45,17 @@ public sealed class Runtime : IAsyncDisposable
     public Runtime(Store store, INetworkProvider? provider = null, IProbeClient? client = null)
     { Store = store; networkProvider = provider ?? new NetworkProvider(); probeClient = client ?? new IcmpProbeClient(); Settings = new(); }
     public Task StartAsync() { worker = Task.Run(Run); return Task.CompletedTask; }
-    public void Configure(Settings settings) { settings.Validate(); commands.Enqueue(() => { Store.SaveSettings(settings); Settings = settings; due.Clear(); CloseIncidents(DateTimeOffset.UtcNow); detectors.Clear(); endpoints.Clear(); Record("Paramètres", $"Configuration modifiée : intervalle {settings.IntervalMs} ms, fenêtre {settings.WindowSeconds} s, pertes > {settings.LossThreshold} %, p95 > {settings.P95ThresholdMs} ms, {settings.ConsecutiveFailures} échecs consécutifs ; validation renouvelée."); }); }
-    public void TogglePause() => commands.Enqueue(() => { Paused = !Paused; Record("Surveillance", Paused ? "Surveillance suspendue" : "Surveillance reprise"); });
-    public void ManualStart(string name) => commands.Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); s=tracker.AttachAnalysis(Settings); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
+    public void Configure(Settings settings) { settings.Validate(); Enqueue(() => { Store.SaveSettings(settings); Settings = settings; due.Clear(); CloseIncidents(DateTimeOffset.UtcNow); detectors.Clear(); endpoints.Clear(); Record("Paramètres", $"Configuration modifiée : intervalle {settings.IntervalMs} ms, fenêtre {settings.WindowSeconds} s, pertes > {settings.LossThreshold} %, p95 > {settings.P95ThresholdMs} ms, {settings.ConsecutiveFailures} échecs consécutifs ; validation renouvelée."); }); }
+    public void TogglePause() => Enqueue(() => { Paused = !Paused; Record("Surveillance", Paused ? "Surveillance suspendue" : "Surveillance reprise"); });
+    public void ManualStart(string name) => Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); s=tracker.AttachAnalysis(Settings); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
     public void ManualEnd() => commands.Enqueue(() => Finish(tracker.End(DateTimeOffset.UtcNow, suppressAuto: true)));
-    public void PowerEvent(string kind) { var at=DateTimeOffset.UtcNow; commands.Enqueue(() => { Store.Save(new NetworkEvent(at,"Alimentation",kind)); }); }
+    public void PowerEvent(string kind) { var at=DateTimeOffset.UtcNow; Enqueue(() => { Store.Save(new NetworkEvent(at,"Alimentation",kind)); }); }
     public void Record(string kind, string message) => Store.Save(new NetworkEvent(DateTimeOffset.UtcNow, kind, message));
     public void Flush() { if (pending.Count == 0) return; Store.WriteProbes(pending); pending.Clear(); lastFlush = DateTimeOffset.UtcNow; }
-    void Finish(Session? session) { if (session is null) return; Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game);
+    async Task Finish(Session? session) { if (session is null) return;
+        // Les sondes commencées avant la fin doivent être présentes dans le rapport automatique.
+        foreach(var id in flights.Keys.ToArray()){var p=await flights[id];flights.Remove(id);if(p.Outcome!=ProbeOutcome.Cancelled){recent.Add(p);pending.Add(p);Accept(p);}}
+        Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game);
         var report = new FreeNetworkMonitor.Reporting.Reports(Store).Create(session, Settings);
         var folder = string.IsNullOrWhiteSpace(Settings.ExportFolder) ? Path.Combine(DataFolder, "reports") : Settings.ExportFolder;
         FreeNetworkMonitor.Reporting.Reports.Export(report, Path.Combine(folder, session.Id));
@@ -72,7 +76,7 @@ public sealed class Runtime : IAsyncDisposable
                     var now = DateTimeOffset.UtcNow;
                     if (now - lastTick > TimeSpan.FromSeconds(5)) Record("Interruption", "Absence de sondes (veille ou retard d’ordonnancement) ; aucune perte ajoutée.");
                     lastTick = now;
-                    while (commands.TryDequeue(out var command)) command();
+                    while (commands.TryDequeue(out var command)) await command();
                     foreach (var id in flights.Keys.ToArray()) if (flights[id].IsCompleted)
                     {
                         var p = await flights[id]; flights.Remove(id); recent.Add(p); pending.Add(p); Accept(p);
@@ -100,7 +104,7 @@ public sealed class Runtime : IAsyncDisposable
                         if (nextNetwork != Network) { Network = nextNetwork; Record("Réseau", $"{Network.Name} • {Network.Kind} • {(Network.Online ? "connecté" : "hors ligne")} • passerelle {Network.Gateway ?? "absente"}"); OnNetworkChanged(now); }
                         var observed = tracker.Observe(Settings.Games, detector.Running(Settings.Games), now, TimeSpan.FromSeconds(Settings.CloseGraceSeconds));
                         if (observed.Started is not null) { Flush(); Store.Save(tracker.AttachAnalysis(Settings)); Record("Session", "Jeu détecté : " + observed.Started.Game); }
-                        Finish(observed.Ended);
+                        await Finish(observed.Ended);
                     }
                     if (!Paused && pending.Count < 50000)
                     {
@@ -127,8 +131,8 @@ public sealed class Runtime : IAsyncDisposable
         catch (Exception e) { Error = "Surveillance arrêtée : " + e.Message; Log.Write(e); Changed?.Invoke(); }
         finally
         {
-            try { if(replacement is not null) {try {var r=await replacement;pending.AddRange(r.Probes);}catch(OperationCanceledException){}} foreach (var f in flights.Values) { var p = await f; if (p.Outcome != ProbeOutcome.Cancelled) pending.Add(p); }
-                Finish(tracker.End(DateTimeOffset.UtcNow, "Interrompue — fermeture de l’application")); Flush(); CloseIncidents(DateTimeOffset.UtcNow); }
+            try { if(replacement is not null) {try {var r=await replacement;pending.AddRange(r.Probes);}catch(OperationCanceledException){}} foreach (var f in flights.Values) { var p = await f; if (p.Outcome != ProbeOutcome.Cancelled) pending.Add(p); } flights.Clear();
+                await Finish(tracker.End(DateTimeOffset.UtcNow, "Interrompue — fermeture de l’application")); Flush(); CloseIncidents(DateTimeOffset.UtcNow); }
             catch (Exception e) { Log.Write(e); }
         }
     }
