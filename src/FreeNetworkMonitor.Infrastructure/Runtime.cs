@@ -7,10 +7,12 @@ namespace FreeNetworkMonitor.Infrastructure;
 public sealed class Runtime : IAsyncDisposable
 {
     public Store Store { get; }
+    public string DataFolder => Path.GetDirectoryName(Store.DatabasePath)!;
     public Settings Settings { get; private set; }
     public NetworkState Network { get; private set; } = new("", "Initialisation", "", null, false);
     public Session? Active => tracker.Active;
     public bool Paused { get; private set; }
+    public bool Ready { get; private set; }
     public string? Error { get; private set; }
     public event Action? Changed;
     public event Action<Session>? SessionEnded;
@@ -28,6 +30,16 @@ public sealed class Runtime : IAsyncDisposable
     readonly Dictionary<string, Task<Probe>> flights = [];
     readonly Dictionary<string, DateTimeOffset> due = [];
     Task? worker;
+    Task<(Target Original, Target Replacement, List<Probe> Probes)>? replacement;
+    readonly HashSet<string> replacementAttempted = [];
+    int disposed;
+    async Task<(Target,Target,List<Probe>)> ValidateReplacement(Target original)
+    {
+        var candidate = new Target(Guid.NewGuid().ToString("N"), original.Name + " (repli OpenDNS)", "208.67.222.222", original.Kind);
+        var samples = new List<Probe>();
+        for(int i=0;i<3;i++) { samples.Add(await probeClient.SendAsync(candidate,Network,Settings.TimeoutMs,stop.Token)); await Task.Delay(Settings.IntervalMs,stop.Token); }
+        return (original,candidate,samples);
+    }
     DateTimeOffset lastFlush, lastDetection, lastPurge, lastTick, started;
     public Runtime(Store store, INetworkProvider? provider = null, IProbeClient? client = null)
     { Store = store; networkProvider = provider ?? new NetworkProvider(); probeClient = client ?? new IcmpProbeClient(); Settings = new(); }
@@ -35,13 +47,13 @@ public sealed class Runtime : IAsyncDisposable
     public void Configure(Settings settings) { settings.Validate(); commands.Enqueue(() => { Store.SaveSettings(settings); Settings = settings; due.Clear(); Record("Paramètres", "Configuration modifiée ; nouvelles cibles validées séparément."); }); }
     public void TogglePause() => commands.Enqueue(() => { Paused = !Paused; Record("Surveillance", Paused ? "Surveillance suspendue" : "Surveillance reprise"); });
     public void ManualStart(string name) => commands.Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
-    public void ManualEnd() => commands.Enqueue(() => Finish(tracker.End(DateTimeOffset.UtcNow)));
+    public void ManualEnd() => commands.Enqueue(() => Finish(tracker.End(DateTimeOffset.UtcNow, suppressAuto: true)));
     public void PowerEvent(string kind) => commands.Enqueue(() => { Record("Alimentation", kind); lastTick = DateTimeOffset.UtcNow; });
     public void Record(string kind, string message) => Store.Save(new NetworkEvent(DateTimeOffset.UtcNow, kind, message));
     public void Flush() { if (pending.Count == 0) return; Store.WriteProbes(pending); pending.Clear(); lastFlush = DateTimeOffset.UtcNow; }
     void Finish(Session? session) { if (session is null) return; Flush(); Store.Save(session); Record("Session", "Session terminée : " + session.Game);
         var report = new FreeNetworkMonitor.Reporting.Reports(Store).Create(session, Settings);
-        var folder = string.IsNullOrWhiteSpace(Settings.ExportFolder) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FreeNetworkMonitor", "reports") : Settings.ExportFolder;
+        var folder = string.IsNullOrWhiteSpace(Settings.ExportFolder) ? Path.Combine(DataFolder, "reports") : Settings.ExportFolder;
         FreeNetworkMonitor.Reporting.Reports.Export(report, Path.Combine(folder, session.Id));
         SessionEnded?.Invoke(session); }
     async Task Run()
@@ -51,7 +63,7 @@ public sealed class Runtime : IAsyncDisposable
             Store.Initialize(); Store.Recover(DateTimeOffset.UtcNow); Settings = Store.LoadSettings(); Settings.Validate();
             started = DateTimeOffset.UtcNow; lastTick = started;
             recent.AddRange(Store.ReadProbes(started.AddMinutes(-15), started));
-            Record("Application", "Surveillance démarrée");
+            Record("Application", "Surveillance démarrée"); Ready = true;
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
             while (await timer.WaitForNextTickAsync(stop.Token))
             {
@@ -64,6 +76,21 @@ public sealed class Runtime : IAsyncDisposable
                     foreach (var id in flights.Keys.ToArray()) if (flights[id].IsCompleted)
                     {
                         var p = await flights[id]; flights.Remove(id); recent.Add(p); pending.Add(p); Accept(p);
+                    }
+                    if(replacement is not null && replacement.IsCompleted)
+                    {
+                        try {
+                            var checkedTarget = await replacement; recent.AddRange(checkedTarget.Probes); pending.AddRange(checkedTarget.Probes);
+                            if(checkedTarget.Probes.All(p=>p.Outcome==ProbeOutcome.Success) && Settings.Targets.Any(t=>t.Id==checkedTarget.Original.Id))
+                            { Settings.Targets = Settings.Targets.Select(t=>t.Id==checkedTarget.Original.Id?checkedTarget.Replacement:t).ToList(); Store.SaveSettings(Settings);
+                              Record("Remplacement", $"{checkedTarget.Original.Name} ({checkedTarget.Original.Host}) remplacée par {checkedTarget.Replacement.Host} après 3 réponses. Aucune panne Internet inférée."); }
+                            else Record("Remplacement", "Cible de repli non validée ; configuration conservée.");
+                        } finally { replacement=null; }
+                    }
+                    if(Settings.AutoReplaceUnmeasurable && !Paused && Network.Online && replacement is null && now-started>TimeSpan.FromSeconds(60))
+                    {
+                        var target=Settings.Targets.FirstOrDefault(t=>t.Enabled && t.Kind==TargetKind.External && t.Host!="208.67.222.222" && !replacementAttempted.Contains(t.Id) && !Settings.Targets.Any(other=>other.Enabled&&other.Host=="208.67.222.222") && recent.Count(p=>p.TargetId==t.Id && p.Eligible)>=30 && !recent.Any(p=>p.TargetId==t.Id&&p.Outcome==ProbeOutcome.Success));
+                        if(target is not null){replacementAttempted.Add(target.Id);replacement=ValidateReplacement(target);}
                     }
                     recent.RemoveAll(p => p.At < now.AddMinutes(-15));
                     if (now - lastDetection >= TimeSpan.FromSeconds(2))
@@ -100,7 +127,7 @@ public sealed class Runtime : IAsyncDisposable
         catch (Exception e) { Error = "Surveillance arrêtée : " + e.Message; Log.Write(e); Changed?.Invoke(); }
         finally
         {
-            try { foreach (var f in flights.Values) { var p = await f; if (p.Outcome != ProbeOutcome.Cancelled) pending.Add(p); }
+            try { if(replacement is not null) {try {var r=await replacement;pending.AddRange(r.Probes);}catch(OperationCanceledException){}} foreach (var f in flights.Values) { var p = await f; if (p.Outcome != ProbeOutcome.Cancelled) pending.Add(p); }
                 Finish(tracker.End(DateTimeOffset.UtcNow, "Interrompue — fermeture de l’application")); Flush(); CloseIncidents(DateTimeOffset.UtcNow); }
             catch (Exception e) { Log.Write(e); }
         }
@@ -121,7 +148,7 @@ public sealed class Runtime : IAsyncDisposable
     }
     void OnNetworkChanged(DateTimeOffset now) { CloseIncidents(now); detectors.Clear(); endpoints.Clear(); }
     void CloseIncidents(DateTimeOffset now) { foreach(var d in detectors.Values) if(d.Close(now) is Incident i) Store.Save(i); }
-    public async ValueTask DisposeAsync() { stop.Cancel(); if (worker is not null) await worker; stop.Dispose(); }
+    public async ValueTask DisposeAsync() { if(Interlocked.Exchange(ref disposed,1)!=0)return; stop.Cancel(); if (worker is not null) await worker; stop.Dispose(); }
 }
 public static class Log
 {

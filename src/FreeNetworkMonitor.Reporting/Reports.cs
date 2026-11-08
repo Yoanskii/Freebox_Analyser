@@ -39,7 +39,7 @@ public sealed class Reports(Store store)
             var endWindow = incident.Start.AddSeconds(settings.WindowSeconds);
             var rows = probes.Where(p => p.At >= incident.Start && p.At < endWindow && p.At >= session.Start).GroupBy(p => p.TargetId)
                 .Select(g => (settings.Targets.FirstOrDefault(t=>t.Id==g.Key) ?? new Target(g.Key,g.First().TargetName,g.First().Address),
-                    Metrics.Calculate(g,probes.Any(p=>p.TargetId==g.Key && p.At<incident.Start && p.Outcome==ProbeOutcome.Success)))).ToList();
+                    Metrics.Calculate(g,probes.Count(p=>p.TargetId==g.Key && p.At<incident.Start && p.Outcome==ProbeOutcome.Success)>=3))).ToList();
             var text = Diagnosis.Describe(rows,settings);
             if (!text.Contains("insuffisantes") && !text.StartsWith("Aucune")) { summary = $"Fenêtre commune {incident.Start:O} / {endWindow:O} : " + text; break; }
             summary = "Incidents ICMP observés. Données insuffisantes pour localiser leur origine ; voir les fenêtres et destinations détaillées.";
@@ -79,7 +79,7 @@ public sealed class Reports(Store store)
         b.Append("<h2>Incidents</h2><table><tr><th>Début / fin UTC</th><th>Destination</th><th>Preuves à l’ouverture</th></tr>");
         foreach(var i in r.Incidents) b.Append($"<tr><td>{i.Start:O}<br>{H(i.End?.ToString("O")??"ouvert")}</td><td>{H(i.TargetId)}</td><td>{H(i.Reason)} · {i.Failed}/{i.Eligible} échecs · p95 {V(i.P95Ms)} ms</td></tr>");
         b.Append("</table><h2>Chronologie</h2><ul>"); foreach(var e in r.Events) b.Append($"<li>{e.At:O} · {H(e.Kind)} · {H(e.Message)}</li>");
-        b.Append("</ul><h2>Méthode</h2><p>RTT : seuls les succès. Médiane usuelle, p95 au rang plafond(0,95×n). Gigue : moyenne des écarts absolus entre RTT réussis consécutifs de même adresse et interface ; un échec coupe la série. Ce n’est pas la gigue RTP. Invalides : DNS, erreur locale, hors ligne, annulation. Confiance limitée sous 20 sondes ; cible validée après 3 succès par adresse/interface. Le contexte d’interface est observé, sans forcer le routage système. Le CSV et le JSON contiennent les sondes individuelles.</p><p>Imprimer depuis le navigateur → Microsoft Print to PDF. Aucun service distant nécessaire.</p></html>");
+        b.Append("</ul><h2>Méthode</h2><p>RTT : seuls les succès. Médiane usuelle, p95 au rang plafond(0,95×n). Gigue : moyenne des écarts absolus entre RTT réussis consécutifs de même adresse et interface ; un échec coupe la série. Ce n’est pas la gigue RTP. Invalides : DNS, erreur locale, injoignable ambiguë, hors ligne, annulation. Confiance limitée sous 20 sondes ; cible validée après 3 succès par adresse/interface. Le contexte d’interface est observé, sans forcer le routage système. Le CSV et le JSON contiennent les sondes individuelles.</p><p>Imprimer depuis le navigateur → Microsoft Print to PDF. Aucun service distant nécessaire.</p></html>");
         return b.ToString();
     }
     static string Graph(Probe[] probes,DateTimeOffset sessionStart)

@@ -5,7 +5,7 @@ public sealed record Target(string Id, string Name, string Host, TargetKind Kind
 public sealed record Probe(DateTimeOffset At, string TargetId, string TargetName, string Address, string InterfaceId,
     ProbeOutcome Outcome, double? RttMs = null, string? Detail = null, string Protocol = "ICMP", int IpVersion = 4)
 {
-    public bool Eligible => Outcome is ProbeOutcome.Success or ProbeOutcome.Timeout or ProbeOutcome.Unreachable;
+    public bool Eligible => Outcome is ProbeOutcome.Success or ProbeOutcome.Timeout;
 }
 public sealed record NetworkState(string Id, string Name, string Kind, string? Gateway, bool Online);
 public sealed record NetworkEvent(DateTimeOffset At, string Kind, string Message);
