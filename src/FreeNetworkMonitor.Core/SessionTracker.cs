@@ -11,6 +11,7 @@ public sealed class SessionTracker
         manual = isManual; absentSince = null;
         return Active = new(Guid.NewGuid().ToString("N"), name, now, null, now.AddMinutes(-15), Executable: executable, GameId: gameId);
     }
+    public Session AttachAnalysis(Settings settings) => Active = (Active ?? throw new InvalidOperationException("Pas de session active.")) with {Analysis=AnalysisConfiguration.From(settings)};
     public Session? End(DateTimeOffset now, string state = "Complète", bool suppressAuto = false)
     {
         if (Active is null) return null;

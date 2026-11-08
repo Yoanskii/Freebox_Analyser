@@ -15,6 +15,10 @@ public class ReportTests
         using var json=JsonDocument.Parse(File.ReadAllText(Path.Combine(dir,"rapport.json")));Assert.Equal(100,json.RootElement.GetProperty("Probes").GetArrayLength());Assert.Equal(101,File.ReadAllLines(Path.Combine(dir,"rapport.csv")).Length);var html=File.ReadAllText(Path.Combine(dir,"rapport.html"));Assert.Contains("&lt;script&gt;",html);Assert.DoesNotContain("<script>",html);Assert.Contains("UDP/TCP",html);
         }finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
     }
+    [Fact] public void SessionRetainsAnalysisThresholdsAfterUserChangesSettings()
+    {
+        var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());try{var db=new Store(Path.Combine(dir,"m.db"));db.Initialize();var tracker=new SessionTracker();var now=DateTimeOffset.UtcNow;tracker.Begin("Test",null,now);tracker.AttachAnalysis(new Settings{LossThreshold=12,P95ThresholdMs=150});var session=tracker.End(now.AddSeconds(1))!;var report=new Reports(db).Create(session,new Settings{LossThreshold=1,P95ThresholdMs=10});Assert.Equal(12,report.Analysis.LossThreshold);Assert.Equal(150,report.Analysis.P95ThresholdMs);}finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}
+    }
     [Fact] public void PurgeKeepsBaselineOfRetainedSession()
     {var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());try{var db=new Store(Path.Combine(dir,"m.db"));db.Initialize();var now=DateTimeOffset.UtcNow;var s=new Session("s","Jeu",now.AddMinutes(-1),now,now.AddMinutes(-16),"Complète");db.Save(s);db.WriteProbes([MetricsTests.P(0) with{At=now.AddMinutes(-15)},MetricsTests.P(1) with{At=now.AddDays(-40)}]);db.Purge(now.AddMinutes(-5));Assert.Single(db.ReadProbes(now.AddDays(-50),now));}finally{Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(dir,true);}}
 }

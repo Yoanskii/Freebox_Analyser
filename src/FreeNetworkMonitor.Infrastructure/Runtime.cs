@@ -44,9 +44,9 @@ public sealed class Runtime : IAsyncDisposable
     public Runtime(Store store, INetworkProvider? provider = null, IProbeClient? client = null)
     { Store = store; networkProvider = provider ?? new NetworkProvider(); probeClient = client ?? new IcmpProbeClient(); Settings = new(); }
     public Task StartAsync() { worker = Task.Run(Run); return Task.CompletedTask; }
-    public void Configure(Settings settings) { settings.Validate(); commands.Enqueue(() => { Store.SaveSettings(settings); Settings = settings; due.Clear(); Record("Paramètres", "Configuration modifiée ; nouvelles cibles validées séparément."); }); }
+    public void Configure(Settings settings) { settings.Validate(); commands.Enqueue(() => { Store.SaveSettings(settings); Settings = settings; due.Clear(); CloseIncidents(DateTimeOffset.UtcNow); detectors.Clear(); endpoints.Clear(); Record("Paramètres", $"Configuration modifiée : intervalle {settings.IntervalMs} ms, fenêtre {settings.WindowSeconds} s, pertes > {settings.LossThreshold} %, p95 > {settings.P95ThresholdMs} ms, {settings.ConsecutiveFailures} échecs consécutifs ; validation renouvelée."); }); }
     public void TogglePause() => commands.Enqueue(() => { Paused = !Paused; Record("Surveillance", Paused ? "Surveillance suspendue" : "Surveillance reprise"); });
-    public void ManualStart(string name) => commands.Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
+    public void ManualStart(string name) => commands.Enqueue(() => { if (tracker.Active is null) { var s = tracker.Begin(name, null, DateTimeOffset.UtcNow, true); s=tracker.AttachAnalysis(Settings); Flush(); Store.Save(s); Record("Session", "Session manuelle démarrée : " + name); } });
     public void ManualEnd() => commands.Enqueue(() => Finish(tracker.End(DateTimeOffset.UtcNow, suppressAuto: true)));
     public void PowerEvent(string kind) { var at=DateTimeOffset.UtcNow; commands.Enqueue(() => { Store.Save(new NetworkEvent(at,"Alimentation",kind)); }); }
     public void Record(string kind, string message) => Store.Save(new NetworkEvent(DateTimeOffset.UtcNow, kind, message));
@@ -99,7 +99,7 @@ public sealed class Runtime : IAsyncDisposable
                         var nextNetwork = networkProvider.Get();
                         if (nextNetwork != Network) { Network = nextNetwork; Record("Réseau", $"{Network.Name} • {Network.Kind} • {(Network.Online ? "connecté" : "hors ligne")} • passerelle {Network.Gateway ?? "absente"}"); OnNetworkChanged(now); }
                         var observed = tracker.Observe(Settings.Games, detector.Running(Settings.Games), now, TimeSpan.FromSeconds(Settings.CloseGraceSeconds));
-                        if (observed.Started is not null) { Flush(); Store.Save(observed.Started); Record("Session", "Jeu détecté : " + observed.Started.Game); }
+                        if (observed.Started is not null) { Flush(); Store.Save(tracker.AttachAnalysis(Settings)); Record("Session", "Jeu détecté : " + observed.Started.Game); }
                         Finish(observed.Ended);
                     }
                     if (!Paused && pending.Count < 50000)

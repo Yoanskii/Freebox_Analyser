@@ -3,7 +3,7 @@ public enum ProbeOutcome { Success, Timeout, Unreachable, DnsError, LocalError, 
 public enum TargetKind { Gateway, External, Personal }
 public sealed record Target(string Id, string Name, string Host, TargetKind Kind = TargetKind.External, bool Enabled = true);
 public sealed record Probe(DateTimeOffset At, string TargetId, string TargetName, string Address, string InterfaceId,
-    ProbeOutcome Outcome, double? RttMs = null, string? Detail = null, string Protocol = "ICMP", int IpVersion = 4)
+    ProbeOutcome Outcome, double? RttMs = null, string? Detail = null, string Protocol = "ICMP", int IpVersion = 4, TargetKind Kind = TargetKind.External)
 {
     public bool Eligible => Outcome is ProbeOutcome.Success or ProbeOutcome.Timeout;
 }
@@ -11,7 +11,7 @@ public sealed record NetworkState(string Id, string Name, string Kind, string? G
 public sealed record NetworkEvent(DateTimeOffset At, string Kind, string Message);
 public sealed record Game(string Id, string Name, string ProcessName, string? Path = null, bool Enabled = true);
 public sealed record Session(string Id, string Game, DateTimeOffset Start, DateTimeOffset? End,
-    DateTimeOffset BaselineStart, string State = "En cours", string? Executable = null, string? GameId = null);
+    DateTimeOffset BaselineStart, string State = "En cours", string? Executable = null, string? GameId = null, AnalysisConfiguration? Analysis = null);
 public sealed record Incident(string Id, string TargetId, DateTimeOffset Start, DateTimeOffset? End, string Reason,
     int Eligible, int Failed, double? P95Ms);
 public sealed record Statistics(int Total, int Sent, int Received, int Failed, int Invalid, double? LossPercent,
@@ -51,3 +51,9 @@ public sealed class Settings
 }
 public interface IProbeClient { Task<Probe> SendAsync(Target target, NetworkState network, int timeoutMs, CancellationToken cancellationToken); }
 public interface INetworkProvider { NetworkState Get(); }
+
+public sealed record AnalysisConfiguration(int IntervalMs,int WindowSeconds,double LossThreshold,double P95ThresholdMs,int ConsecutiveFailures)
+{
+    public static AnalysisConfiguration From(Settings s)=>new(s.IntervalMs,s.WindowSeconds,s.LossThreshold,s.P95ThresholdMs,s.ConsecutiveFailures);
+    public Settings ToSettings()=>new(){IntervalMs=IntervalMs,WindowSeconds=WindowSeconds,LossThreshold=LossThreshold,P95ThresholdMs=P95ThresholdMs,ConsecutiveFailures=ConsecutiveFailures};
+}

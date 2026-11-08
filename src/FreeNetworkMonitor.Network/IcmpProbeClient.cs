@@ -11,7 +11,7 @@ public sealed class IcmpProbeClient : IProbeClient
         string host = target.Kind == TargetKind.Gateway ? network.Gateway ?? "" : target.Host;
         IPAddress? address = null;
         Probe Result(ProbeOutcome outcome, double? rtt = null, string? detail = null) => new(at, target.Id, target.Name,
-            address?.ToString() ?? host, network.Id, outcome, rtt, detail, "ICMP", address?.AddressFamily == AddressFamily.InterNetworkV6 ? 6 : 4);
+            address?.ToString() ?? host, network.Id, outcome, rtt, detail, "ICMP", address?.AddressFamily == AddressFamily.InterNetworkV6 ? 6 : 4, target.Kind);
         if (!network.Online || string.IsNullOrEmpty(host)) return Result(ProbeOutcome.Offline, detail: "Interface ou passerelle indisponible");
         try
         {

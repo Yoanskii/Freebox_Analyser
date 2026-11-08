@@ -8,11 +8,12 @@ using FreeNetworkMonitor.Persistence;
 namespace FreeNetworkMonitor.Reporting;
 public sealed record TargetComparison(string TargetId, string Name, string Address, string InterfaceId, string Protocol, int IpVersion, Statistics Before, Statistics During);
 public sealed record Report(Session Session, DateTimeOffset GeneratedAt, double BaselineAvailableMinutes, bool BaselineComplete,
-    string Summary, string Methodology, List<TargetComparison> Targets, List<Probe> Probes, List<Incident> Incidents, List<NetworkEvent> Events);
+    string Summary, string Methodology, List<TargetComparison> Targets, List<Probe> Probes, List<Incident> Incidents, List<NetworkEvent> Events, AnalysisConfiguration Analysis);
 public sealed class Reports(Store store)
 {
     public Report Create(Session session, Settings settings)
     {
+        settings=session.Analysis?.ToSettings()??settings;
         var end = session.End ?? DateTimeOffset.UtcNow;
         var probes = store.ReadProbes(session.BaselineStart, end).OrderBy(p => p.At).ToList();
         var targets = probes.GroupBy(p => (p.TargetId, p.TargetName, p.Address, p.InterfaceId, p.Protocol, p.IpVersion)).Select(g =>
@@ -38,13 +39,13 @@ public sealed class Reports(Store store)
         {
             var endWindow = incident.Start.AddSeconds(settings.WindowSeconds);
             var rows = probes.Where(p => p.At >= incident.Start && p.At < endWindow && p.At >= session.Start).GroupBy(p => p.TargetId)
-                .Select(g => (settings.Targets.FirstOrDefault(t=>t.Id==g.Key) ?? new Target(g.Key,g.First().TargetName,g.First().Address),
-                    Metrics.Calculate(g,probes.Count(p=>p.TargetId==g.Key && p.At<incident.Start && p.Outcome==ProbeOutcome.Success)>=3))).ToList();
+                .Select(g => {var latest=g.Last();var endpoint=g.Where(p=>p.Address==latest.Address&&p.InterfaceId==latest.InterfaceId);var validated=probes.Count(p=>p.TargetId==g.Key&&p.Address==latest.Address&&p.InterfaceId==latest.InterfaceId&&p.At<incident.Start&&p.Outcome==ProbeOutcome.Success)>=3;
+                    return (new Target(g.Key,latest.TargetName,latest.Address,latest.Kind),Metrics.Calculate(endpoint,validated));}).ToList();
             var text = Diagnosis.Describe(rows,settings);
             if (!text.Contains("insuffisantes") && !text.StartsWith("Aucune")) { summary = $"Fenêtre commune {incident.Start:O} / {endWindow:O} : " + text; break; }
             summary = "Incidents ICMP observés. Données insuffisantes pour localiser leur origine ; voir les fenêtres et destinations détaillées.";
         }
-        return new(session,DateTimeOffset.UtcNow,available,complete,summary,Diagnosis.Limits,targets,probes,incidents,store.ReadEvents(session.BaselineStart,end));
+        return new(session,DateTimeOffset.UtcNow,available,complete,summary,Diagnosis.Limits,targets,probes,incidents,store.ReadEvents(session.BaselineStart,end),AnalysisConfiguration.From(settings));
     }
     public static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
     public static void Export(Report report, string basePath)
@@ -76,6 +77,7 @@ public sealed class Reports(Store store)
             b.Append("</table>");
             b.Append(Graph(r.Probes.Where(p=>p.TargetId==t.TargetId && p.Address==t.Address && p.InterfaceId==t.InterfaceId).ToArray(),r.Session.Start));
         }
+        b.Append($"<p>Réglages d’analyse au début : intervalle {r.Analysis.IntervalMs} ms, fenêtre {r.Analysis.WindowSeconds} s, seuil pertes {V(r.Analysis.LossThreshold)} %, RTT p95 {V(r.Analysis.P95ThresholdMs)} ms, {r.Analysis.ConsecutiveFailures} échecs consécutifs. Les changements pendant le jeu sont tracés dans la chronologie. Les incidents conservent les seuils appliqués au moment de leur ouverture.</p>");
         b.Append("<h2>Incidents</h2><table><tr><th>Début / fin UTC</th><th>Destination</th><th>Preuves à l’ouverture</th></tr>");
         foreach(var i in r.Incidents) b.Append($"<tr><td>{i.Start:O}<br>{H(i.End?.ToString("O")??"ouvert")}</td><td>{H(i.TargetId)}</td><td>{H(i.Reason)} · {i.Failed}/{i.Eligible} échecs · p95 {V(i.P95Ms)} ms</td></tr>");
         b.Append("</table><h2>Chronologie</h2><ul>"); foreach(var e in r.Events) b.Append($"<li>{e.At:O} · {H(e.Kind)} · {H(e.Message)}</li>");
